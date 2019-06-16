@@ -73,25 +73,6 @@ if !exists('g:vimBoxLinterOkSymbol')
 endif
 
 
-let g:reasonml_did_ensure_shell_plugins=0
-if !exists('g:reasonml_force_ocamlmerlin_path')
-  let g:reasonml_force_ocamlmerlin_path=''
-endif
-if !exists('g:reasonml_most_recent_ocamlmerlin_path')
-  let g:reasonml_most_recent_ocamlmerlin_path=''
-endif
-if !exists('g:reasonml_most_recent_merlin_env')
-  let g:reasonml_most_recent_merlin_env={}
-endif
-
-" The binary path that was used to load the vim plugin lazily. If you load
-" multiple projects, each having their own merlin version, you can end up with
-" multiple different merlin binaries - but we can only use *one* of their vim
-" plugins.
-if !exists('g:reasonml_ocamlmerlin_path_used_to_load_merlin_vim_plugin')
-  let g:reasonml_ocamlmerlin_path_used_to_load_merlin_vim_plugin=''
-endif
-
 " From auto-format plugin:
 " https://github.com/Chiel92/vim-autoformat/blob/master/plugin/autoformat.vim
 
@@ -199,53 +180,4 @@ function! s:isZero(a)
   return type(a:a) == g:v_t_string ? 0 : (type(a:a) == g:v_t_number ? (a:a == 0) : 0)
 endfunction
 
-function! ReasonMaybeUseThisMerlinVimPluginForAllProjects(thisProjectsMerlinPath)
-  let thisProjectsMerlinPath = resolve(__ReasonUtilsTrimStr(a:thisProjectsMerlinPath))
-  if empty(g:reasonml_ocamlmerlin_path_used_to_load_merlin_vim_plugin)
-    " Set the global merlin to this project's merlin.
-    let g:reasonml_ocamlmerlin_path_used_to_load_merlin_vim_plugin = thisProjectsMerlinPath
 
-    let ocamlmerlin=substitute(thisProjectsMerlinPath,'ocamlmerlin\(\.exe\)\?$','','') . "../share/merlin/vim/"
-    let ocamlmerlinRtp = __ReasonUtilsDirPath(ocamlmerlin)
-    " syntastic. Enabled by default, no-op when syntastic isn't present
-    let g:syntastic_ocaml_checkers=['merlin']
-    let g:syntastic_reason_checkers=['merlin']
-    let g:plugs_reasonPluginLoader={}
-    let g:plugs_reasonPluginLoader['merlin'] = {'dir': (ocamlmerlinRtp)}
-    call call(function("ReasonPluginLoaderLoad"), keys(g:plugs_reasonPluginLoader))
-    " TODO: Make reasonPluginLoader do this rtp modification like VimPlug.
-    execute "set rtp+=".ocamlmerlinRtp
-  endif
-endfunction
-
-" This is called every time b:merlin_path is empty/unlet when
-" merlin#Register() is called. We can set all the b:merlin_env/b:merlin_path
-" before calling merlin#Register(), but implementing MerlinSelectBinary will
-" give us a hook to implement some lookup if for some reason our code setting
-" those b: variables couldn't run. For example, if we opened the stdlib when
-" jupming to definition. An esy project wouldn't have been loaded, so we
-" couldn't set those variables, yet this function will still run. In that
-" case, we can use some fallback paths/envs etc.
-" There's no way you can prevent .ml files from calling into this function and
-" registering merlin (the stock merlin vim plugin does the registering!) So
-" might as well use some ocamlmerlin binary instead of failing.
-function! MerlinSelectBinary()
-  let projectRoot = esy#FetchProjectRootCached()
-  if !empty(projectRoot)
-    if !exists("b:merlin_env") || empty(b:merlin_env)
-      call console#Warn("Merlin environment should have been prepared by now. Falling back")
-      let b:merlin_env = g:reasonml_most_recent_merlin_env
-    endif
-    if !exists("b:reasonml_thisProjectsMerlinPath") || empty(b:reasonml_thisProjectsMerlinPath)
-      call console#Warn("Have not found a path to merlin for one file - falling back to most recently found merlin.")
-      return g:reasonml_most_recent_ocamlmerlin_path
-    else
-      return b:reasonml_thisProjectsMerlinPath
-    endif
-  else
-    " call console#Warn('empty project root - this probably should not happen.')
-    call console#Warn("No esy project found for file - falling back to most recently found merlin.")
-    return g:reasonml_most_recent_ocamlmerlin_path
-  endif
-  return g:reasonml_most_recent_ocamlmerlin_path
-endfunction
